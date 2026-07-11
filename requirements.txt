@@ -1,0 +1,8 @@
+numpy
+scikit-learn
+matplotlib
+hmmlearn>=0.3.3
+bayesflow>=2.0
+keras>=3.0
+torch
+nbformat
