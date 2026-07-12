@@ -1,0 +1,14 @@
+# Large generated artifacts (regenerate with the pipeline)
+simulated_chains.csv
+fb_targets.npz
+*.keras
+
+# Ground-truth data (download from Kaggle)
+archive/*.csv
+
+# Scratch / QA outputs
+slides_png/
+*.log
+_smoke*.csv
+__pycache__/
+*.pyc
