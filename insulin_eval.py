@@ -62,10 +62,13 @@ def fetch_chains(pdb_id, data=DATA):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--pdb-id", default="1A7F")
+    ap.add_argument("--pdb-id", default="1MSO",
+                    help="1MSO = wild-type human insulin; 1A7F = mutant (B16E, B24G, des-B30)")
     ap.add_argument("--input", default=DATA)
     ap.add_argument("--num-samples", type=int, default=500)
+    ap.add_argument("--out", default=None, help="figure path (default insulin_<pdbid>.png)")
     args = ap.parse_args(argv)
+    out_fig = args.out or os.path.join(HERE, f"insulin_{args.pdb_id}.png")
 
     chains = fetch_chains(args.pdb_id, args.input)
     if not chains:
@@ -110,8 +113,8 @@ def main(argv=None):
         ax.legend(fontsize=8, loc="upper right", ncol=3)
     axes[-1, 0].set_xlabel("residue")
     fig.tight_layout()
-    fig.savefig(OUT_FIG, dpi=130)
-    print(f"saved figure -> {OUT_FIG}")
+    fig.savefig(out_fig, dpi=130)
+    print(f"saved figure -> {out_fig}")
 
 
 if __name__ == "__main__":

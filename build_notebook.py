@@ -188,22 +188,31 @@ md(r"""
 ## Step 4 — Insulin & real-protein evaluation
 
 The model trained **only on simulated data**, so real proteins are genuinely held out (no leakage).
-We pull human insulin (1A7F) and its true DSSP labels straight from the dataset and score the
-posterior against the strict H-only helix labels.
+We use **wild-type** human insulin (`1MSO`) — an earlier version used `1A7F`, which is a *mutant*
+(B16 Tyr→Glu, B24 Phe→Gly, des-B30) whose sparse A-chain annotation inflated its A-chain AUC.
+Scored against the strict `sst8` H-only helix labels.
 """)
 
 code(r"""
 from insulin_eval import fetch_chains
 
-for code_, seqi, sst8 in fetch_chains("1A7F"):
+for code_, seqi, sst8 in fetch_chains("1MSO"):
     obs = encode(seqi)
     ti = np.array([1 if c == 'H' else 0 for c in sst8], dtype=int)
     bfp, _ = predict_helix(approx, obs, num_samples=300)
     fbp, _ = fb_posterior(seqi, fb_model)
-    print(f"insulin chain {code_} (len {len(seqi):>2}, helix {int(ti.sum()):>2}): "
+    print(f"1MSO chain {code_} (len {len(seqi):>2}, helix {int(ti.sum()):>2}): "
           f"BayesFlow AUC={roc_auc_score(ti, bfp):.3f}   FB AUC={roc_auc_score(ti, fbp):.3f}")
 
-display(Image(filename="insulin_prediction.png"))
+# 1MSO is a dimer: chains A,C are A-chains; B,D are B-chains.
+display(Image(filename="insulin_1MSO.png"))
+""")
+
+md(r"""
+The **B-chain** helix is propensity-driven (L, V, E, A) → recovered (**AUC 0.98**). The **A-chain**
+helix is **disulfide-stabilised and cysteine-rich**, and C is helix-*disfavouring* in the emission
+table → the model predicts "not helix" exactly where the helix is (**AUC 0.52, chance**). A
+sequence-only HMM cannot see 3-D disulfide bonds. (Only 2–4 chains — illustrative, not a benchmark.)
 """)
 
 md(r"""
@@ -215,21 +224,39 @@ code(r"""display(Image(filename="real_eval_auc_hist.png"))""")
 md(r"""
 ## Step 5 — Comparison & results
 
-BayesFlow reproduces exact Forward–Backward in **every** setting, and both track ground truth
-equally — high on insulin's textbook helices, ~0.75 across the real proteome.
+BayesFlow reproduces exact Forward–Backward in **every** setting (faithful amortization). Scored
+against a **majority-class baseline**: accuracy@0.5 only beats the baseline on the calibrated
+(simulated / pooled real) settings — on insulin it ties or falls below it, so **AUC is the fair
+metric**. (`python compare_metrics.py`, `python emission_check.py`.)
 """)
 code(r"""
 display(Image(filename="comparison_table.png"))
 display(Image(filename="comparison.png"))
+display(Image(filename="emission_check.png"))   # emissions vs real data: r = 0.99
+""")
+
+md(r"""
+## Step 6 — SBI diagnostics
+
+Predictive metrics say the estimate is *useful*; these say whether the *posterior* is honest.
+Convergence, recovery (r = 0.999) and posterior contraction (0.999) are excellent, but **SBC
+reveals a small (~0.15 posterior-SD) calibration bias** — the uncertainty band is not perfectly
+calibrated. Likely cause: the near-degenerate 3-D target (dim-correlation 0.89–0.96) vs a coupling
+flow. Not the logit-clip atom at residue 0 (excluding it doesn't fix SBC). (`python diagnostics.py`.)
+""")
+code(r"""
+display(Image(filename="diag_loss.png"))
+display(Image(filename="diag_sbc_ecdf.png"))
+display(Image(filename="diag_recovery.png"))
 """)
 
 md(r"""
 ## TL;DR
 
-- α-helix modeled as a **2-state HMM** whose transition probabilities **match real proteins** (0.912 vs 0.90).
-- Trained a **BayesFlow** amortized posterior on exact **Forward–Backward** targets via a sliding **31-residue window**.
-- It **reproduces exact FB almost perfectly** (r = 0.999) — instant inference, no HMM at test time.
-- On **unseen real proteins** it ranks helices well (insulin AUC 0.97–0.98; PISCES 0.75), bounded by the model's Bayes ceiling.
+- α-helix as a **2-state HMM** whose transition **and emission** tables match real proteins (r ≈ 0.99).
+- **BayesFlow** amortized posterior trained on exact **Forward–Backward** targets via a sliding **31-residue window**; reproduces exact FB almost perfectly (**r = 0.999**).
+- **Diagnostics:** excellent recovery & contraction, but SBC shows a small (~0.15 SD) calibration bias — an owned limitation.
+- On unseen real proteins it ranks **propensity-driven** helices well (insulin B-chain 0.98; PISCES 0.75) but **fails where structure is 3-D-stabilised** (insulin A-chain 0.52) — the price of a sequence-only model. Exact FB is a ceiling on *simulated* data only.
 """)
 
 nb["cells"] = cells

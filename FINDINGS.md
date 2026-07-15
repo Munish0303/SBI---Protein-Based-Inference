@@ -241,8 +241,13 @@ python forward_backward.py --limit 3000    # quick subset
 | **E. Numerical sanity** | no under/overflow on long chains | all 24.28M values finite and in [0,1]; max 0.980 |
 | **F. Viterbi vs posterior** | decoders consistent | agree 83.7%; posterior acc 0.753 ≥ Viterbi acc 0.710 (expected: marginal decoding maximises per-residue accuracy) |
 
-The 0.790 AUC is the **Bayes-optimal ceiling** for this model (emission tables overlap),
-so BayesFlow can approach but not exceed it.
+The ~0.79 AUC is the **Bayes-optimal ceiling — ON SIMULATED DATA ONLY**, where the HMM
+*is* the true generating model, so exact FB is by definition optimal and BayesFlow can
+approach but not exceed it. **This claim does NOT transfer to real proteins**: there the
+HMM is misspecified, so FB is *not* a ceiling and a better model can (and does) beat it.
+(Numbers differ slightly by subset/run: FB scored 0.790/0.753 on the 3,000-chain FB check
+in §9, and 0.798/0.760 on the 500-chain held-out validation split in §10. Same model,
+different n — not a discrepancy.)
 
 ### Further checks still available (not yet run)
 - Log-likelihood model discrimination: true model should score simulated data higher
@@ -374,7 +379,8 @@ live from `real_eval_per_chain.csv`; other rows are carried from their runs.
 
 - [x] ~~Run exact Forward–Backward to produce per-residue `P(helix)` targets.~~ → `fb_targets.npz`
 - [x] ~~Train / validate BayesFlow against these targets.~~ → corr 0.999, `bayesflow_posterior.keras`
-- [x] ~~Evaluate on real proteins using `sst8` H-only labels (AUC / accuracy).~~ → `eval_real.py` (AUC 0.78–0.82)
+- [x] ~~Evaluate on real proteins using `sst8` H-only labels (AUC / accuracy).~~ → `eval_real.py`
+      (definitive, all 8,994 chains: **per-chain AUC 0.754**, pooled 0.771)
 - [x] ~~Validation figure (scatter + example chain w/ uncertainty band).~~ → `validation_figure.png`
 - [x] ~~Insulin test vs ground truth (assignment step 4).~~ → `insulin_prediction.png` (A 0.97, B 0.98)
 
@@ -382,3 +388,82 @@ The restart pipeline is complete end-to-end: simulate → Forward–Backward →
 → validation → real-protein & insulin evaluation. Possible extensions: empirical
 emission-table check vs real data; Q3 (H,G,I) helix definition comparison; larger
 training run (`--max-windows 600000`).
+
+---
+
+## 13. SBI DIAGNOSTICS (Block A) — `diagnostics.py`
+
+The metrics above (AUC, accuracy, correlation-with-FB) are **predictive**. An SBI workflow
+also requires **inferential** diagnostics: is the *posterior* honest? Run on the held-out
+tail block (2,000 windows, 250 draws each), never trained on.
+
+| Diagnostic | Figure | Result |
+|---|---|---|
+| Convergence (loss curve) | `diag_loss.png` | loss −3.83 → **−7.91** over 30 epochs, plateaued |
+| Recovery | `diag_recovery.png` | **r = 0.999** on all 3 target dims |
+| Posterior contraction | `diag_contraction.png` | **0.999** (posterior far tighter than prior) |
+| **SBC rank ECDF** | `diag_sbc_ecdf.png` | ❌ **FAILS** — ECDF exits the 95% band on all 3 dims |
+
+### The SBC failure — diagnosed
+- **Magnitude is small:** posterior *width* is well calibrated (RMSE/sd ≈ 1.0, mean\|z\| =
+  0.82–0.88 vs 0.80 expected). The problem is a **location bias of only 0.12–0.20 posterior
+  SDs** (≈0.01 logit ≈ 0.002 in probability). Point estimates are unaffected (corr 0.999).
+- **Not the logit-clip atom.** γ = 0 *exactly* at residue 0 for every chain (start rule) →
+  `logit` clipped to −6.907, a **point mass** a continuous flow cannot represent. It is the
+  ONLY such atom (γ ≥ 0.0043 everywhere else in 24.3M residues). But excluding the start
+  residues does **not** fix SBC (`diag_sbc_ecdf_nostart.png`) — so this is not the cause.
+- **Likely cause: a near-degenerate target.** The 3-D target (γ at prev/centre/next) has
+  inter-dim correlations **0.89–0.96** — the true joint is nearly a 1-D curve in 3-D. A
+  *coupling* flow splits dimensions asymmetrically, which is consistent with the observed
+  opposite-sign bias (prev/centre biased high, next biased low).
+- **Honest reading:** the point estimate is excellent, but the uncertainty is *not* perfectly
+  calibrated. Candidate fixes (untested): decorrelate/reduce the target, more capacity or
+  epochs, or a non-coupling inference net (e.g. FlowMatching).
+
+---
+
+## 14. CORRECTIONS (Block B)
+
+### (a) Insulin: we were reporting a MUTANT — the A-chain result does not survive
+`1A7F` is **not wild-type human insulin**. Diffed against the canonical sequence it carries
+**B16 Tyr→Glu, B24 Phe→Gly, and des-B30** (hence len 29, not 30). `1MSO` is true wild-type.
+
+| Structure | Chain | helix res | AUC BayesFlow | AUC FB |
+|---|---|---|---|---|
+| **1MSO (wild-type)** | **B** | 11/30 | **0.981** | 0.986 |
+| **1MSO (wild-type)** | **A** | 12/21 | **0.519** | 0.509 |
+| 1A7F (mutant) | B | 10/29 | 0.984 | 0.984 |
+| 1A7F (mutant) | A | 4/21 | 0.971 | 0.971 |
+
+> The previously headlined **A-chain AUC 0.97 was an artifact of the mutant structure's
+> sparse annotation.** On wild-type, the A-chain is at **chance (0.52)**.
+
+**Why (and it's a good story):** the B-chain central helix is propensity-driven (L, V, E, A,
+L — classic helix formers) and the model nails it. The A-chain's N-terminal helix is
+**stabilized by disulfide bonds** and is cysteine-rich — and in the emission table **C is
+helix-*disfavoring*** (1% helix vs 2% other). A sequence-propensity HMM therefore predicts
+"not helix" exactly where the real helix is. It cannot see 3-D disulfide stabilization.
+
+Also: insulin conclusions rest on very few positive residues (n = 2–4 chains) — treat as
+illustrative, not as a robust benchmark.
+
+### (b) Majority-class baseline — accuracy@0.5 is not impressive
+| Setting | helix frac | trivial baseline | our acc@0.5 | verdict |
+|---|---|---|---|---|
+| Held-out simulated | 0.325 | 0.675 | 0.760 | beats it |
+| Real PISCES (8,994) | 0.322 | 0.678 | 0.743 | beats it |
+| Insulin B (1MSO) | 0.367 | 0.633 | 0.633 | **ties it** |
+| Insulin A (1MSO) | 0.571 | 0.571 | 0.429 | **BELOW it** |
+
+On insulin the model **never crosses P = 0.5** (uncalibrated to real proteins), so it predicts
+all-"other" → accuracy collapses to the baseline or below. **AUC is the only fair metric here.**
+
+### (c) Emission tables ARE realistic (the check we previously never did)
+`emission_check.py` → `emission_check.png`. Empirical P(aa | state) from real PISCES
+(sst8 H-only) vs the given tables:
+- **max deviation: 0.9 pp (helix), 0.8 pp (other)**
+- **correlation: r = 0.992 (helix), r = 0.982 (other)**
+
+So both the transition *and* emission tables are empirically well-founded. (Note: the earlier
+claim "100% of real chains start in other" is **near-tautological** — DSSP cannot assign H to a
+terminal residue — so it is not independent confirmation of the start rule.)

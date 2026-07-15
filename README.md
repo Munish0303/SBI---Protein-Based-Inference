@@ -119,9 +119,11 @@ python simulate.py                 # 1. simulate 100,000 chains  -> simulated_ch
 python forward_backward.py         # 2. exact FB targets         -> fb_targets.npz
 python train_bayesflow.py          # 3. train BayesFlow          -> bayesflow_posterior.keras
 python make_figures.py             #    BayesFlow-vs-FB figure    -> validation_figure.png
-python insulin_eval.py             # 4. insulin vs ground truth  -> insulin_prediction.png
+python insulin_eval.py             # 4. wild-type insulin (1MSO) -> insulin_1MSO.png
 python eval_real.py --limit 0      # 4. all real PISCES chains   -> real_eval_*.{csv,png}
-python compare_metrics.py          # 5. comparison table + chart -> comparison*.png
+python compare_metrics.py          # 5. comparison + baseline    -> comparison*.png
+python emission_check.py           #    emissions vs real data   -> emission_check.png
+python diagnostics.py              #    SBI diagnostics (SBC etc) -> diag_*.png
 ```
 
 Common flags: `train_bayesflow.py --train-chains N --max-windows M --epochs E`;
@@ -131,27 +133,50 @@ Common flags: `train_bayesflow.py --train-chains N --max-windows M --epochs E`;
 
 ## Results
 
-**BayesFlow reproduces exact Forward–Backward almost perfectly**, and both track ground truth
-equally — capped by the model's Bayes-optimal ceiling (the emission tables overlap, so no
-method can separate helix/other perfectly).
+**BayesFlow reproduces exact Forward–Backward almost perfectly** (r = 0.999). Whether the
+prediction is *good* depends entirely on whether the helix is sequence-driven — which the
+wild-type insulin result makes vivid. Scored with a **majority-class baseline** for honesty:
 
-| Setting | AUC BayesFlow | AUC exact FB | Acc@0.5 BayesFlow | Acc@0.5 exact FB |
+| Setting | AUC BayesFlow | AUC exact FB | Acc@0.5 | Majority baseline |
 |---|---|---|---|---|
-| Held-out simulated | 0.798 | 0.798 | 0.760 | 0.760 |
-| Insulin A (real, 1A7F) | 0.971 | 0.971 | 0.810 | 0.810 |
-| Insulin B (real, 1A7F) | 0.984 | 0.984 | 0.793 | 0.793 |
-| Real PISCES (8,994 chains) | 0.754 | 0.754 | 0.743 | 0.743 |
+| Held-out simulated | 0.798 | 0.798 | 0.760 | 0.675 |
+| Insulin B — wild-type 1MSO | 0.981 | 0.986 | 0.633 | 0.633 |
+| Insulin A — wild-type 1MSO | 0.519 | 0.509 | 0.429 | 0.571 |
+| Real PISCES (8,994 chains) | 0.754 | 0.754 | 0.743 | 0.678 |
 
 On held-out simulated chains, BayesFlow vs exact FB: **correlation 0.999, MAE 0.007**.
+
+> **On "ceiling":** exact FB is the Bayes-optimal ceiling **only on simulated data**, where the
+> HMM *is* the true model. On real proteins the HMM is misspecified, so FB is **not** a ceiling —
+> a better model can beat it.
+
+> **Insulin caveat (important):** the wild-type structure **1MSO** is used. An earlier version
+> used **1A7F**, which is a *mutant* (B16 Tyr→Glu, B24 Phe→Gly, des-B30) whose sparse A-chain
+> annotation inflated the A-chain AUC to 0.97. On wild-type, the B-chain helix (propensity-driven)
+> scores **0.98**, but the A-chain helix (disulfide-stabilised, cysteine-rich — and C *disfavours*
+> helix in the emission table) is at **chance, 0.52**: a sequence-only HMM cannot see 3-D
+> disulfide bonds. Insulin rests on only 2 chains — illustrative, not a benchmark.
 
 <p align="center"><img src="validation_figure.png" width="820"><br>
 <em>Fig 5 — BayesFlow posterior mean vs exact FB (r = 0.999); example chain with ±1 std band.</em></p>
 
-<p align="center"><img src="insulin_prediction.png" width="720"><br>
-<em>Fig 6 — Human insulin (1A7F): P(helix) rises inside the annotated helix on both chains.</em></p>
+<p align="center"><img src="insulin_1MSO_slide.png" width="720"><br>
+<em>Fig 6 — Wild-type insulin (1MSO): the B-chain helix (propensity-driven) is recovered (AUC 0.98);
+the A-chain helix (disulfide-stabilised) is not (AUC 0.52).</em></p>
 
-<p align="center"><img src="comparison.png" width="820"><br>
-<em>Fig 7 — AUC and accuracy: BayesFlow vs exact FB across all four settings.</em></p>
+<p align="center"><img src="comparison.png" width="860"><br>
+<em>Fig 7 — AUC and accuracy@0.5 vs the majority-class baseline, BayesFlow vs exact FB.</em></p>
+
+### SBI diagnostics
+
+Beyond predictive metrics, we run inferential diagnostics. Convergence, recovery (r = 0.999),
+and posterior contraction (0.999) are excellent, but **simulation-based calibration (SBC)
+reveals a small (~0.15 posterior-SD) location bias** — the point estimate is superb, the
+uncertainty band is not perfectly calibrated. Likely cause: the near-degenerate 3-D target
+(inter-dim correlation 0.89–0.96) vs a coupling flow.
+
+<p align="center"><img src="diag_sbc_ecdf.png" width="820"><br>
+<em>Fig 8 — SBC rank ECDF: the curve exiting the 95% band signals the calibration bias.</em></p>
 
 ---
 

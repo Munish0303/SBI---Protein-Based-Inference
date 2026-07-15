@@ -100,10 +100,10 @@ s=content(1,"The question","Emissions — and are they realistic?");
 s.addImage({path:IMG+"/hmm_explainer/2_emission_probabilities.png",x:2.95,y:1.85,w:7.45,h:3.46});
 caption(s,"Fig 2. Per-state amino-acid emission probabilities (α-helix vs other).",2.95,5.35,7.45);
 s.addShape(P.shapes.ROUNDED_RECTANGLE,{x:0.55,y:5.9,w:12.2,h:1.15,fill:{color:TINT},rectRadius:0.1});
-s.addText([{text:"Model checks out against real data:   ",options:{bold:true,color:DEEP,fontSize:13.5}},
-  {text:"P(helix→helix) 0.912 vs 0.90   ·   P(other→helix) 0.041 vs 0.05   ·   mean helix run 11.4 vs 10   ·   100% of real chains start in “other”.",options:{fontSize:13,color:INK}}],
+s.addText([{text:"Yes — checked against real PISCES data:   ",options:{bold:true,color:DEEP,fontSize:13.5}},
+  {text:"emissions match at r = 0.99 (max 0.9 pp off); transitions match too (P(h→h) 0.912 vs 0.90). Both tables are empirically well-founded.",options:{fontSize:13,color:INK}}],
   {x:0.85,y:5.9,w:11.6,h:1.15,valign:"middle",fontFace:BODY,margin:0});
-s.addNotes("Each state emits amino acids with its own propensities (helix loves A,L,E; breakers G,P favor other). We verified the GIVEN transition probabilities against real sst8 data — they match within ~1 point, confirming the model's macro-statistics are realistic.");
+s.addNotes("Each state emits amino acids with its own propensities (helix loves A,L,E; breakers G,P favor other). We measured the empirical P(amino acid | DSSP H vs non-H) from real PISCES and overlaid it on the given tables: correlation 0.992 (helix) / 0.982 (other), max deviation 0.9 pp. Transitions match too. So both halves of the model are grounded in data. (The old 'transitions-only' evidence was a mismatch with this slide's title — now fixed.)");
 
 /* ---------- 6. [2] Simulator + FB ---------- */
 s=content(2,"Forward–Backward","Notebooks 1–2: simulate, then get exact targets");
@@ -152,17 +152,17 @@ s.addText([{text:"Why a window?\n",options:{bold:true,color:MINT,fontSize:14,bre
   {x:8.65,y:4.15,w:3.9,h:1.4,valign:"top",fontFace:BODY,margin:0});
 s.addNotes("Walk through the table. Stress the disjoint train/val split — a natural exam question is 'how do you know there's no leakage?' Answer: front vs tail blocks, plus a runtime assert that no validation sequence appears in training.");
 
-/* ---------- 9. [4] Insulin ---------- */
-s=content(4,"Insulin & real evaluation","Held-out real protein: human insulin (1A7F)");
-s.addImage({path:IMG+"/restart/insulin_prediction.png",x:5.25,y:1.9,w:7.35,h:4.54});
-caption(s,"Fig 5. Insulin P(helix): BayesFlow (green) vs exact FB (black); gold band = true helix.",5.25,6.45,7.35);
+/* ---------- 9. [4] Insulin (wild-type 1MSO) ---------- */
+s=content(4,"Insulin & real evaluation","Held-out real protein: wild-type insulin (1MSO)");
+s.addImage({path:IMG+"/restart/insulin_1MSO_slide.png",x:5.35,y:1.95,w:7.2,h:4.19});
+caption(s,"Fig 5. Insulin P(helix): BayesFlow (green) vs exact FB (black); gold = true helix.",5.35,6.25,7.2);
 s.addText(bullets([
-  "Insulin + its true DSSP labels pulled straight from the dataset.",
-  "Model trained ONLY on simulated data → insulin is genuinely unseen (no leakage).",
-  "P(helix) rises inside the annotated helix on both chains.",
-  "AUC: chain A 0.97, chain B 0.98 — BayesFlow = exact FB."
-],14),{x:0.5,y:2.0,w:4.6,h:4.3,fontFace:BODY,valign:"top"});
-s.addNotes("This is the assignment's step 4. Note: absolute P(helix) peaks only ~0.56 on the B-chain — the fixed HMM is uncalibrated to real proteins, so AUC (ranking) is the fair metric, not accuracy@0.5.");
+  "Insulin + true DSSP labels from the dataset; model trained ONLY on simulated data (unseen).",
+  "B-chain helix is propensity-driven (L,V,E,A) → nailed, AUC 0.98.",
+  "A-chain helix is disulfide-stabilised & Cys-rich; C disfavours helix in our table → model predicts “not helix” → AUC 0.52 (chance).",
+  "A sequence-only HMM cannot see 3-D disulfide bonds."
+],13.5),{x:0.5,y:2.0,w:4.7,h:4.5,fontFace:BODY,valign:"top"});
+s.addNotes("CORRECTION from an earlier version: 1A7F is a MUTANT insulin (B16E, B24G, des-B30) whose sparse A-chain annotation inflated the A-chain AUC to 0.97. On wild-type 1MSO the A-chain is at chance (0.52). The B-chain (0.98) is genuine. The A-chain failure is scientifically informative: its N-terminal helix is stabilised by disulfide bonds, and cysteine is helix-disfavouring in the emission table, so a propensity HMM predicts non-helix exactly where the helix is. Insulin rests on only 2-4 chains — illustrative, not a robust benchmark.");
 
 /* ---------- 10. [4] Real proteome ---------- */
 s=content(4,"Insulin & real evaluation","All real proteins (PISCES)");
@@ -185,36 +185,40 @@ s.addText([{text:"Held-out simulated chains: correlation 0.999, MAE 0.007.  ",op
   {x:0.7,y:6.5,w:12,h:0.7,fontFace:BODY,align:"center",margin:0});
 s.addNotes("Headline result 1: BayesFlow reproduces the exact posterior almost perfectly. The scatter hugging the diagonal is the money plot.");
 
-/* ---------- 12. [5] comparison bar ---------- */
-s=content(5,"Comparison & results","Result 2: head-to-head across every setting");
-s.addImage({path:IMG+"/restart/comparison.png",x:1.45,y:1.8,w:10.4,h:4.16});
-caption(s,"Fig 8. AUC and accuracy@0.5: BayesFlow vs exact FB across all four settings.",1.45,6.0,10.4);
-s.addText([{text:"BayesFlow and exact FB are identical everywhere.  ",options:{bold:true,color:DEEP,fontSize:14}},
-  {text:"High on insulin’s textbook helices (0.97–0.98); ~0.75 across the real proteome.",options:{fontSize:14,color:INK}}],
-  {x:0.7,y:6.55,w:12,h:0.6,fontFace:BODY,align:"center",margin:0});
-s.addNotes("The bars for BayesFlow and FB are the same height in every group — that's the whole thesis: faithful amortization. Both track ground truth equally.");
+/* ---------- 12. [5] SBI diagnostics ---------- */
+s=content(5,"Comparison & results","SBI diagnostics: convergence, calibration, contraction");
+s.addImage({path:IMG+"/restart/diag_loss.png",x:0.55,y:2.0,w:4.35,h:2.61});
+caption(s,"Fig 8a. Training loss.",0.55,4.6,4.35);
+s.addImage({path:IMG+"/restart/diag_sbc_ecdf.png",x:5.25,y:2.05,w:7.45,h:2.44});
+caption(s,"Fig 8b. Simulation-based calibration (SBC) rank ECDF, per target dim.",5.25,4.55,7.45);
+s.addText(bullets([
+  "Convergence: loss −3.8 → −7.9, plateaued.  Recovery r = 0.999 and posterior contraction 0.999 — the estimate is excellent and tight.",
+  "SBC (right): the rank ECDF slightly exits the 95% band → a small location bias (~0.15 posterior SD ≈ 0.002 in probability). The uncertainty band is not perfectly calibrated.",
+  "Honest limitation: point estimates are unaffected; likely cause is the near-degenerate 3-D target (dim-correlations 0.89–0.96) vs a coupling flow. Candidate fix left as future work."
+],12.5),{x:0.55,y:5.05,w:12.2,h:2.2,fontFace:BODY,valign:"top"});
+s.addNotes("This is the SBI-specific evidence the course asks for (convergence + calibration + contraction), and it's the most likely place questions land. Own the SBC result: the posterior is a superb point estimate (r=0.999) but its uncertainty is slightly mis-located — a ~0.15-SD bias that only a sensitive test like SBC catches. We diagnosed it: NOT the logit-clip atom at residue 0 (excluding it doesn't fix SBC); the more likely cause is that the 3 target dims are 0.89-0.96 correlated, which coupling flows handle poorly. Showing you found AND interpreted a calibration failure is worth more than hiding it.");
 
 /* ---------- 13. [5] results table ---------- */
 s=content(5,"Comparison & results","Results at a glance");
-s.addImage({path:IMG+"/restart/comparison_table.png",x:0.9,y:1.95,w:11.5,h:2.92});
-caption(s,"Table 1. AUC and accuracy@0.5 — BayesFlow vs exact Forward–Backward, all settings.",0.9,5.0,11.5);
+s.addImage({path:IMG+"/restart/comparison_table.png",x:1.05,y:1.95,w:11.2,h:2.80});
+caption(s,"Table 1. AUC & accuracy@0.5 vs the majority-class baseline — BayesFlow vs exact FB.",1.05,4.85,11.2);
 s.addText(bullets([
-  "BayesFlow ≈ exact FB in every setting (AUC identical to 3 decimals).",
-  "Both approach — never beat — the exact Bayesian answer (the AUC ceiling).",
-  "Accuracy < AUC on real data: a calibration gap, expected for a fixed HMM."
-],13.5),{x:1.4,y:5.5,w:10.6,h:1.6,fontFace:BODY,valign:"top"});
-s.addNotes("Read the table row by row. Key: the two method columns are equal everywhere, and no number beats exact FB — which is the correctness signature, since FB is the exact Bayesian posterior.");
+  "BayesFlow ≈ exact FB in every setting — faithful amortization.",
+  "Accuracy@0.5 only beats the trivial baseline on the calibrated (simulated / pooled real) settings; on insulin it ties or falls below it → AUC is the fair metric.",
+  "FB is a ceiling on SIMULATED data only; on real proteins the HMM is misspecified, so a better model can beat it."
+],13),{x:1.1,y:5.3,w:11.1,h:1.9,fontFace:BODY,valign:"top"});
+s.addNotes("The two method columns are equal everywhere (faithful amortization). The added baseline column is the honest reading: on insulin the model never crosses P=0.5, so accuracy collapses to the baseline. Do NOT claim FB is a ceiling on real data — it isn't, because the HMM is misspecified there.");
 
 /* ---------- 14. TL;DR ---------- */
 s=P.addSlide(); s.background={color:DARK};
 s.addText("α",{x:9.4,y:0.2,w:4,h:7,fontFace:HEAD,fontSize:340,bold:true,color:WM,align:"center",valign:"middle",margin:0});
 s.addText("TL;DR — take-home message",{x:0.7,y:0.7,w:12,h:0.8,fontFace:HEAD,fontSize:30,bold:true,color:WHITE,margin:0});
 s.addText([
-  {text:"α-helix modeled as a 2-state HMM whose transition probabilities match real proteins (0.912 vs 0.90).",options:{bullet:{indent:14},breakLine:true,fontSize:16,color:WHITE,paraSpaceAfter:12}},
-  {text:"Trained a BayesFlow amortized posterior on exact Forward–Backward targets via a sliding 31-residue window.",options:{bullet:{indent:14},breakLine:true,fontSize:16,color:WHITE,paraSpaceAfter:12}},
-  {text:"It reproduces exact FB almost perfectly (r = 0.999) — instant inference, no HMM at test time.",options:{bullet:{indent:14},breakLine:true,fontSize:16,color:WHITE,paraSpaceAfter:12}},
-  {text:"On unseen real proteins it ranks helices well (insulin 0.97–0.98; PISCES 0.75), bounded by the model’s Bayes ceiling.",options:{bullet:{indent:14},fontSize:16,color:WHITE}}
-],{x:0.75,y:1.75,w:11.6,h:3.4,fontFace:BODY,valign:"top"});
+  {text:"α-helix as a 2-state HMM whose transition AND emission tables match real proteins (r ≈ 0.99).",options:{bullet:{indent:14},breakLine:true,fontSize:16,color:WHITE,paraSpaceAfter:11}},
+  {text:"BayesFlow amortized posterior trained on exact Forward–Backward targets via a sliding 31-residue window; it reproduces exact FB almost perfectly (r = 0.999).",options:{bullet:{indent:14},breakLine:true,fontSize:16,color:WHITE,paraSpaceAfter:11}},
+  {text:"Diagnostics: excellent recovery & contraction, but SBC reveals a small (~0.15 SD) calibration bias — a real, owned limitation.",options:{bullet:{indent:14},breakLine:true,fontSize:16,color:WHITE,paraSpaceAfter:11}},
+  {text:"On unseen real proteins it ranks propensity-driven helices well (insulin B-chain 0.98; PISCES 0.75) but fails where structure is 3-D-stabilised (insulin A-chain 0.52) — the price of a sequence-only model.",options:{bullet:{indent:14},fontSize:16,color:WHITE}}
+],{x:0.75,y:1.7,w:11.6,h:3.7,fontFace:BODY,valign:"top"});
 s.addShape(P.shapes.LINE,{x:0.8,y:5.55,w:3.2,h:0,line:{color:TEAL,width:2}});
 s.addText([{text:"Group [ number ]  ·  [ Member names ]\n",options:{fontSize:15,bold:true,color:MINT,breakLine:true}},
   {text:"[ email ]@tu-dortmund.de   ·   Simulation-Based Inference, TU Dortmund",options:{fontSize:13,color:WHITE}}],
