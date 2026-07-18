@@ -1,0 +1,14 @@
+{
+  "setting": "real_pisces",
+  "n_chains": 8994,
+  "n_both_class": 8308,
+  "n_single_class": 686,
+  "num_samples": 50,
+  "auc_bf": 0.7529137085949977,
+  "auc_fb": 0.7538556046000369,
+  "acc_bf": 0.7277806415496917,
+  "acc_fb": 0.7280970680465985,
+  "baseline": 0.7077732178708427,
+  "pooled_auc_bf": 0.7704232658256616,
+  "pooled_auc_fb": 0.771559222911901
+}

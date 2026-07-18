@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="900" viewBox="0 0 680 900" role="img">
+<title>SBI Protein-Based Inference — full project data flow</title>
+<desc>Given HMM spec -> simulate.py -> forward_backward.py -> train_bayesflow.py -> four evaluation scripts writing metrics JSON -> compare_metrics.py; a train_calibrated.py experiment; all feeding the deck, notebook and docs.</desc>
+<style>
+ text{font-family:'Segoe UI',Arial,sans-serif;fill:#17342b;}
+ .th{font-size:14px;font-weight:700;} .ts{font-size:12px;}
+ .teal{fill:#9FE1CB;stroke:#0F6E56;stroke-width:1;}
+ .gray{fill:#D3D1C7;stroke:#7A7869;stroke-width:1;}
+ .coral{fill:#F0997B;stroke:#993C1D;stroke-width:1;}
+ .arr{stroke:#5B6B66;stroke-width:1.5;fill:none;}
+</style>
+<rect x="0" y="0" width="680" height="900" fill="#ffffff"/>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#5B6B66" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+<rect x="40" y="14" width="13" height="13" rx="3" class="teal"/><text x="58" y="24" class="ts">script (.py)</text>
+<rect x="165" y="14" width="13" height="13" rx="3" class="gray"/><text x="183" y="24" class="ts">data / model</text>
+<rect x="300" y="14" width="13" height="13" rx="3" class="coral"/><text x="318" y="24" class="ts">experiment</text>
+<text x="640" y="24" text-anchor="end" class="ts">dashed = feeds docs/deck</text>
+
+<rect x="35" y="44" width="300" height="50" rx="8" class="gray"/><text x="185" y="66" text-anchor="middle" class="th">GIVEN: HMM spec</text><text x="185" y="84" text-anchor="middle" class="ts">90/10/5/95 + emissions (fixed)</text>
+<rect x="345" y="44" width="300" height="50" rx="8" class="gray"/><text x="495" y="66" text-anchor="middle" class="th">archive/ real data</text><text x="495" y="84" text-anchor="middle" class="ts">PISCES DSSP annotations</text>
+
+<line x1="185" y1="94" x2="245" y2="112" class="arr" marker-end="url(#arrow)"/>
+<rect x="190" y="112" width="300" height="50" rx="8" class="teal"/><text x="340" y="134" text-anchor="middle" class="th">1 · simulate.py</text><text x="340" y="152" text-anchor="middle" class="ts">run the fixed HMM</text>
+<line x1="340" y1="162" x2="340" y2="176" class="arr" marker-end="url(#arrow)"/>
+<rect x="190" y="176" width="300" height="48" rx="8" class="gray"/><text x="340" y="197" text-anchor="middle" class="th">simulated_chains.csv</text><text x="340" y="214" text-anchor="middle" class="ts">100,000 chains</text>
+<line x1="340" y1="224" x2="340" y2="238" class="arr" marker-end="url(#arrow)"/>
+<rect x="190" y="238" width="300" height="50" rx="8" class="teal"/><text x="340" y="260" text-anchor="middle" class="th">2 · forward_backward.py</text><text x="340" y="278" text-anchor="middle" class="ts">hmmlearn Forward–Backward</text>
+<line x1="340" y1="288" x2="340" y2="302" class="arr" marker-end="url(#arrow)"/>
+<rect x="190" y="302" width="300" height="48" rx="8" class="gray"/><text x="340" y="323" text-anchor="middle" class="th">fb_targets.npz</text><text x="340" y="340" text-anchor="middle" class="ts">exact γ = P(helix) targets</text>
+<line x1="340" y1="350" x2="340" y2="364" class="arr" marker-end="url(#arrow)"/>
+<rect x="190" y="364" width="300" height="52" rx="8" class="teal"/><text x="340" y="387" text-anchor="middle" class="th">3 · train_bayesflow.py</text><text x="340" y="405" text-anchor="middle" class="ts">31×21 window → CouplingFlow</text>
+<line x1="340" y1="416" x2="340" y2="430" class="arr" marker-end="url(#arrow)"/>
+<rect x="190" y="430" width="300" height="48" rx="8" class="gray"/><text x="340" y="451" text-anchor="middle" class="th">bayesflow_posterior.keras</text><text x="340" y="468" text-anchor="middle" class="ts">amortized posterior</text>
+
+<text x="340" y="500" text-anchor="middle" class="th">4 · EVALUATE — held-out sim + real proteins</text>
+<line x1="340" y1="478" x2="103" y2="514" class="arr" marker-end="url(#arrow)"/>
+<line x1="340" y1="478" x2="261" y2="514" class="arr" marker-end="url(#arrow)"/>
+<line x1="340" y1="478" x2="419" y2="514" class="arr" marker-end="url(#arrow)"/>
+<line x1="340" y1="478" x2="577" y2="514" class="arr" marker-end="url(#arrow)"/>
+<rect x="28" y="514" width="150" height="60" rx="8" class="teal"/><text x="103" y="536" text-anchor="middle" class="ts">make_figures.py</text><text x="103" y="556" text-anchor="middle" class="ts">held-out · r 0.998</text>
+<rect x="186" y="514" width="150" height="60" rx="8" class="teal"/><text x="261" y="536" text-anchor="middle" class="ts">insulin_eval.py</text><text x="261" y="556" text-anchor="middle" class="ts">1MSO · B 0.98</text>
+<rect x="344" y="514" width="150" height="60" rx="8" class="teal"/><text x="419" y="536" text-anchor="middle" class="ts">eval_real.py</text><text x="419" y="556" text-anchor="middle" class="ts">8,994 PISCES · 0.75</text>
+<rect x="502" y="514" width="150" height="60" rx="8" class="teal"/><text x="577" y="536" text-anchor="middle" class="ts">diagnostics.py</text><text x="577" y="556" text-anchor="middle" class="ts">SBC · loss · recovery</text>
+
+<line x1="103" y1="574" x2="103" y2="592" class="arr" marker-end="url(#arrow)"/>
+<line x1="261" y1="574" x2="261" y2="592" class="arr" marker-end="url(#arrow)"/>
+<line x1="419" y1="574" x2="419" y2="592" class="arr" marker-end="url(#arrow)"/>
+<rect x="34" y="592" width="138" height="36" rx="6" class="gray"/><text x="103" y="614" text-anchor="middle" class="ts">metrics_sim.json</text>
+<rect x="192" y="592" width="138" height="36" rx="6" class="gray"/><text x="261" y="614" text-anchor="middle" class="ts">metrics_insulin.json</text>
+<rect x="350" y="592" width="138" height="36" rx="6" class="gray"/><text x="419" y="614" text-anchor="middle" class="ts">metrics_real.json</text>
+
+<line x1="103" y1="628" x2="230" y2="652" class="arr" marker-end="url(#arrow)"/>
+<line x1="261" y1="628" x2="300" y2="652" class="arr" marker-end="url(#arrow)"/>
+<line x1="419" y1="628" x2="360" y2="652" class="arr" marker-end="url(#arrow)"/>
+<rect x="95" y="652" width="410" height="52" rx="8" class="teal"/><text x="300" y="674" text-anchor="middle" class="th">5 · compare_metrics.py</text><text x="300" y="692" text-anchor="middle" class="ts">reads metrics_*.json → table + chart (data-driven)</text>
+
+<path d="M600 574 L600 730" class="arr" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<text x="612" y="655" class="ts">SBC fails</text><text x="612" y="670" class="ts">→ why?</text>
+<rect x="40" y="730" width="600" height="58" rx="8" class="coral"/><text x="340" y="753" text-anchor="middle" class="th">train_calibrated.py — calibration experiment</text><text x="340" y="772" text-anchor="middle" class="ts">FlowMatching + CNN summary net · W=31 fails SBC → W=7 passes</text>
+
+<path d="M300 704 L300 820" class="arr" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<path d="M300 716 L130 824" class="arr" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<path d="M300 716 L500 824" class="arr" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<rect x="35" y="824" width="195" height="50" rx="8" class="gray"/><text x="132" y="846" text-anchor="middle" class="ts">SBI_presentation.pptx/pdf</text><text x="132" y="864" text-anchor="middle" class="ts">build_deck.js</text>
+<rect x="242" y="824" width="195" height="50" rx="8" class="gray"/><text x="339" y="846" text-anchor="middle" class="ts">SBI_pipeline.ipynb</text><text x="339" y="864" text-anchor="middle" class="ts">build_notebook.py</text>
+<rect x="449" y="824" width="195" height="50" rx="8" class="gray"/><text x="546" y="846" text-anchor="middle" class="ts">README + FINDINGS.md</text><text x="546" y="864" text-anchor="middle" class="ts">the write-up</text>
+</svg>

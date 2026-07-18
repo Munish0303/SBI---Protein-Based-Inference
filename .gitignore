@@ -7,8 +7,10 @@ fb_targets.npz
 archive/*.csv
 
 # Scratch / QA outputs
+logs/
 slides_png/
-*.log
+*_ATOM.keras
 _smoke*.csv
 __pycache__/
 *.pyc
+.Rhistory

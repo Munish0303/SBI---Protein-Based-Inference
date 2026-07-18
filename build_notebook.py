@@ -29,7 +29,8 @@ the full-scale results are shown from the saved runs.
 """)
 
 code(r"""
-import os
+import os, sys
+sys.path.insert(0, "src")                        # the pipeline modules live in src/
 os.environ.setdefault("KERAS_BACKEND", "torch")   # must precede keras/bayesflow import
 %matplotlib inline
 import numpy as np
@@ -48,6 +49,12 @@ md(r"""
 Two hidden states, **helix** and **other**. Every chain starts in *other*. The state path is a
 first-order Markov chain; each state emits an amino acid from its own table. All numbers come
 from `simulate.py` (single source of truth).
+
+> **Prior & likelihood.** No parameters are inferred — everything is fixed. The **prior** is the
+> induced distribution over hidden state paths **p(z₁:T)** given `startprob = [0,1]` and the
+> transition matrix; the **likelihood** is the emission table. In the amortized setup, the
+> effective prior over θ is the marginal of `logit γ` induced by simulating chains and running
+> Forward–Backward — which is exactly what SBC ranks against (Step 6).
 """)
 
 code(r"""
@@ -147,10 +154,29 @@ A normalizing flow needs a **fixed-size** input, but chains vary in length. So w
 residue at a time** from a fixed **31-residue window** (±15), slid along the chain. The window is
 **one-hot encoded** as 31 × 21 channels (20 amino acids + 1 padding for chain ends). Because the
 window is only local, the target stays uncertain → a genuine posterior (mean ± std).
+
+> **Why SBI when the likelihood is tractable?** Because **the tractability is the point.** This is
+> a benchmark where the exact posterior is *known*, which is the only way to *verify* that an
+> amortized neural posterior is faithful. In a real SBI problem you could never run this check.
+
+> **The mismatch we own:** θ is γ computed by FB from the **whole chain**, but we condition on a
+> **local window**. The cell below shows why that's harmless — and why `r = 0.999` is *expected*,
+> not evidence of leakage.
 """)
 
 code(r"""
-display(Image(filename="bayesflow_window_schematic.png"))
+# Why is a +/-15 window enough? The HMM mixes fast.
+ev = np.sort(np.abs(np.linalg.eigvals(TRANS.T)))[::-1]
+lam2 = ev[1]
+print(f"transition matrix eigenvalues: {np.round(ev, 4)}")
+print(f"second eigenvalue  lambda2 = 1 - 0.10 - 0.05 = {lam2:.2f}\n")
+for k in (5, 10, 15, 20):
+    print(f"  influence at +/-{k:2d} residues:  lambda2^{k} = {lam2**k:.3f}")
+print("\n-> beyond +/-15 residues, <10% of the information remains outside the window.")
+""")
+
+code(r"""
+display(Image(filename="figures/bayesflow_window_schematic.png"))
 
 from train_bayesflow import windows_for_sequence, WINDOW, N_CH, predict_helix
 Wex = windows_for_sequence(encode(seq))
@@ -182,7 +208,7 @@ plt.title("BayesFlow vs exact FB — example chain"); plt.show()
 """)
 
 md("**Validation on held-out simulated chains (full 15k-chain run):** correlation 0.999, MAE 0.007.")
-code(r"""display(Image(filename="validation_figure.png"))""")
+code(r"""display(Image(filename="figures/validation_figure.png"))""")
 
 md(r"""
 ## Step 4 — Insulin & real-protein evaluation
@@ -205,7 +231,7 @@ for code_, seqi, sst8 in fetch_chains("1MSO"):
           f"BayesFlow AUC={roc_auc_score(ti, bfp):.3f}   FB AUC={roc_auc_score(ti, fbp):.3f}")
 
 # 1MSO is a dimer: chains A,C are A-chains; B,D are B-chains.
-display(Image(filename="insulin_1MSO.png"))
+display(Image(filename="figures/insulin_1MSO.png"))
 """)
 
 md(r"""
@@ -219,7 +245,7 @@ md(r"""
 **All real PISCES proteins** (full run: `python eval_real.py --limit 0`) — 8,994 chains, per-chain
 AUC 0.754, BayesFlow = exact FB.
 """)
-code(r"""display(Image(filename="real_eval_auc_hist.png"))""")
+code(r"""display(Image(filename="figures/real_eval_auc_hist.png"))""")
 
 md(r"""
 ## Step 5 — Comparison & results
@@ -230,24 +256,123 @@ against a **majority-class baseline**: accuracy@0.5 only beats the baseline on t
 metric**. (`python compare_metrics.py`, `python emission_check.py`.)
 """)
 code(r"""
-display(Image(filename="comparison_table.png"))
-display(Image(filename="comparison.png"))
-display(Image(filename="emission_check.png"))   # emissions vs real data: r = 0.99
+display(Image(filename="figures/comparison_table.png"))
+display(Image(filename="figures/comparison.png"))
 """)
 
 md(r"""
-## Step 6 — SBI diagnostics
-
-Predictive metrics say the estimate is *useful*; these say whether the *posterior* is honest.
-Convergence, recovery (r = 0.999) and posterior contraction (0.999) are excellent, but **SBC
-reveals a small (~0.15 posterior-SD) calibration bias** — the uncertainty band is not perfectly
-calibrated. Likely cause: the near-degenerate 3-D target (dim-correlation 0.89–0.96) vs a coupling
-flow. Not the logit-clip atom at residue 0 (excluding it doesn't fix SBC). (`python diagnostics.py`.)
+**Are the emission tables realistic?** We measure the empirical `P(amino acid | DSSP H vs non-H)`
+from real PISCES chains and compare to the tables the model was handed — computed live below.
 """)
 code(r"""
-display(Image(filename="diag_loss.png"))
-display(Image(filename="diag_sbc_ecdf.png"))
-display(Image(filename="diag_recovery.png"))
+from emission_check import empirical_emissions
+
+emp = empirical_emissions()
+for k, name in enumerate(["helix", "other"]):
+    r = np.corrcoef(EMIT[k], emp[k])[0, 1]
+    md_ = np.abs(EMIT[k] - emp[k]).max() * 100
+    print(f"{name:>6}: model vs real  r = {r:.3f}   max deviation = {md_:.1f} pp")
+
+x = np.arange(len(AA)); w = 0.38
+fig, ax = plt.subplots(2, 1, figsize=(12, 5.6), sharex=True)
+for k, name in enumerate(["α-helix state", "other state"]):
+    ax[k].bar(x - w/2, EMIT[k]*100, w, label="model (given)", color=TEAL)
+    ax[k].bar(x + w/2, emp[k]*100, w, label="real (PISCES)", color="#B8B5AA")
+    ax[k].set(ylabel="P(aa | state) %", title=name); ax[k].legend(fontsize=8)
+ax[1].set_xticks(x); ax[1].set_xticklabels(AA); ax[1].set_xlabel("amino acid")
+plt.tight_layout(); plt.show()
+""")
+
+md(r"""
+## Step 6 — SBI diagnostics (computed live)
+
+Predictive metrics say the estimate is *useful*; these say whether the **posterior** is honest.
+This is the SBI-specific evidence: **convergence**, **simulation-based calibration (SBC)**,
+**recovery** and **posterior contraction** — all on held-out chains.
+""")
+code(r"""
+import bayesflow as bf
+from train_bayesflow import load_chains, total_chains, build_training_data
+from diagnostics import parse_loss_curve
+
+# --- convergence: the loss curve of the run that produced this model ---
+losses = parse_loss_curve()
+if losses:
+    plt.figure(figsize=(7, 3.4))
+    plt.plot(range(1, len(losses)+1), losses, "-o", ms=3, color=DEEP, lw=1.8)
+    plt.xlabel("epoch"); plt.ylabel("training loss"); plt.grid(alpha=0.25)
+    plt.title(f"Convergence — {len(losses)} epochs ({losses[0]:.2f} → {losses[-1]:.2f})")
+    plt.tight_layout(); plt.show()
+
+# --- build a held-out diagnostic set (tail block, never trained on) ---
+total = total_chains()
+vidx = list(range(total - 300, total))
+tri, _ = load_chains(vidx)
+dchains = [tri[i] for i in vidx]
+dd = build_training_data(dchains, 1200, np.random.default_rng(11))
+th = np.asarray(dd["theta"], np.float32)
+dr = np.asarray(approx.sample(num_samples=200, conditions={"cond": dd["cond"]})["theta"], np.float32)
+print("diagnostic set:", th.shape, " draws:", dr.shape)
+""")
+
+code(r"""
+# --- SBC: is the rank of the true theta uniform among posterior draws? ---
+names = [r"logit $\gamma$ (prev)", r"logit $\gamma$ (centre)", r"logit $\gamma$ (next)"]
+fig = bf.diagnostics.calibration_ecdf(dr, th, variable_names=names, difference=True)
+plt.show()
+
+# --- numeric summaries ---
+pm, ps = dr.mean(1), dr.std(1)
+z = (pm - th) / np.maximum(ps, 1e-8)
+contraction = 1.0 - (ps.mean(0)**2) / (th.std(0)**2)
+print("dim      bias      mean|z|   contraction   (calibrated: |z|~0.80)")
+for i, n in enumerate(["prev", "centre", "next"]):
+    print(f"{n:>6}  {(pm[:,i]-th[:,i]).mean():+.4f}    {np.abs(z[:,i]).mean():.2f}      {contraction[i]:.3f}")
+""")
+
+md(r"""
+### The accuracy ↔ calibration frontier (new finding)
+
+SBC fails on the headline (W=31) model. Is that a bug, or intrinsic? We swept the window over
+five sizes and measured **both** point accuracy (r) and calibration (SBC-KS). Point accuracy
+rises monotonically with W, but calibration is **U-shaped — best at W ≈ 11–15**, then degrades
+sharply as the window becomes near-sufficient (the estimand becomes near-deterministic). So there
+is a **knee at W ≈ 15** with near-top accuracy AND the best calibration; the W=31 model is
+*over-tuned* for accuracy. The trade-off is a tunable design knob, not a defect.
+(`python experiment_pareto.py` → `outputs/metrics_pareto.json`.)
+""")
+code(r"""display(Image(filename="figures/pareto_frontier.png"))""")
+
+md(r"""
+## Step 7 — Known issues / red flags
+
+Being explicit about what is *not* clean:
+
+1. **SBC calibration bias.** The rank ECDF exits the 95% band. The posterior *width* is right
+   (mean|z| ≈ 0.8), but the *location* is off by ~0.15 posterior SD (≈0.002 in probability).
+   Point estimates are unaffected (r = 0.999) — only a sensitive test like SBC catches it.
+2. **The logit-clip atom (fixed).** γ₀ = 0 *exactly* for every chain (start rule) — the only atom
+   in 24.3M residues. `logit` clipped it to −6.907: a point mass a continuous flow cannot represent,
+   which also inflated the standardisation sd of `prev`/`centre` by 13%/7% while leaving `next`
+   untouched — **exactly** the dims that show a positive SBC bias. `build_training_data` now drops
+   the first 2 positions (`SKIP_START=2`), where γ is known a priori anyway.
+3. **Near-degenerate target.** The 3 target dims correlate 0.89–0.96, so the true joint is nearly a
+   1-D curve in 3-D — awkward for a *coupling* flow, which splits dimensions.
+4. **No summary network.** The 31×21 window is flattened to 651 and fed straight in. A 1D-CNN
+   summary net is the canonical BayesFlow choice; deferred.
+5. **Insulin rests on 2 chains.** Illustrative, not a benchmark.
+""")
+code(r"""
+# Red flag 2, measured: the clip atom and its effect on standardisation.
+tr2, _ = load_chains(list(range(0, 2000)))
+c2 = [tr2[i] for i in range(2000)]
+for skip, label in [(0, "old (atoms present)"), (2, "now (SKIP_START=2)")]:
+    t = np.asarray(build_training_data(c2, 40000, np.random.default_rng(7),
+                                       skip_start=skip)["theta"], np.float32)
+    atoms = [(t[:, i] < -6.9).sum() for i in range(3)]
+    sds = [f"{t[:, i].std():.3f}" for i in range(3)]
+    print(f"{label:22s} atoms(prev/centre/next)={atoms}   sd={sds}")
+print("\n-> dropping the deterministic start residues removes the atom and matches the sds.")
 """)
 
 md(r"""
